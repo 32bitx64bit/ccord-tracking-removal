@@ -139,7 +139,7 @@ local function build_change_card(idx, change, palette)
     badges[#badges + 1] = {
       type = "badge",
       text = plural(change.unwrapped_count, "redirect") .. " unwrapped",
-      color = palette.text_on_brand,
+      text_color = palette.text_on_brand,
       bg = palette.brand,
     }
   end
@@ -147,7 +147,7 @@ local function build_change_card(idx, change, palette)
     badges[#badges + 1] = {
       type = "badge",
       text = "path cleaned",
-      color = palette.text_normal,
+      text_color = palette.text_normal,
       bg = palette.bg_tertiary,
     }
   end
@@ -155,7 +155,7 @@ local function build_change_card(idx, change, palette)
     badges[#badges + 1] = {
       type = "badge",
       text = "fragment cleaned",
-      color = palette.text_normal,
+      text_color = palette.text_normal,
       bg = palette.bg_tertiary,
     }
   end
@@ -164,7 +164,7 @@ local function build_change_card(idx, change, palette)
     badges[#badges + 1] = {
       type = "badge",
       text = "-" .. change.removed_params[j],
-      color = palette.danger,
+      text_color = palette.danger,
       bg = palette.bg_tertiary,
     }
   end
@@ -172,7 +172,7 @@ local function build_change_card(idx, change, palette)
     badges[#badges + 1] = {
       type = "badge",
       text = "+" .. tostring(#change.removed_params - max_badges) .. " more",
-      color = palette.text_muted,
+      text_color = palette.text_muted,
       bg = palette.bg_tertiary,
     }
   end
@@ -185,8 +185,8 @@ local function build_change_card(idx, change, palette)
       children = {
         { type = "text", text = "Link #" .. tostring(idx), bold = true, size = 13, color = palette.text_header },
         { type = "spacer", flex = 1 },
-        { id = "copy-clean-" .. tostring(idx), type = "button", text = "Copy Clean" },
-        { id = "copy-orig-" .. tostring(idx), type = "button", text = "Copy Original" },
+        { id = "copy-clean-" .. tostring(idx), type = "button", label = "Copy Clean", variant = "secondary", size = "xs" },
+        { id = "copy-orig-" .. tostring(idx), type = "button", label = "Copy Original", variant = "ghost", size = "xs" },
       },
     },
   }
@@ -195,6 +195,7 @@ local function build_change_card(idx, change, palette)
     children[#children + 1] = {
       type = "row",
       gap = 4,
+      wrap = true,
       align = "center",
       children = badges,
     }
@@ -209,12 +210,13 @@ local function build_change_card(idx, change, palette)
   }
   children[#children + 1] = {
     type = "box",
+    direction = "col",
     bg = palette.bg_tertiary,
-    border = palette.border_subtle,
+    border_color = palette.border_subtle,
     radius = 4,
     padding = 6,
     children = {
-      { type = "text", text = change.original, size = 12, color = palette.text_muted, wrap = true },
+      { type = "text", text = change.original, size = 12, color = palette.text_muted, ellipsis = false },
     },
   }
   children[#children + 1] = {
@@ -226,28 +228,25 @@ local function build_change_card(idx, change, palette)
   }
   children[#children + 1] = {
     type = "box",
+    direction = "col",
     bg = palette.bg_tertiary,
-    border = palette.border_subtle,
+    border_color = palette.border_subtle,
     radius = 4,
     padding = 6,
     children = {
-      { type = "text", text = change.cleaned, size = 12, color = palette.text_normal, wrap = true },
+      { type = "text", text = change.cleaned, size = 12, color = palette.text_normal, ellipsis = false },
     },
   }
 
   return {
     type = "box",
+    direction = "col",
     bg = palette.bg_secondary,
-    border = palette.border_subtle,
+    border_color = palette.border_subtle,
     radius = 8,
     padding = 10,
-    children = {
-      {
-        type = "col",
-        gap = 6,
-        children = children,
-      },
-    },
+    gap = 6,
+    children = children,
   }
 end
 
@@ -319,7 +318,7 @@ function M.open_modal(record)
           {
             type = "badge",
             text = record.short_summary or "cleaned",
-            color = palette.text_on_brand,
+            text_color = palette.text_on_brand,
             bg = palette.brand,
           },
         },
@@ -329,19 +328,15 @@ function M.open_modal(record)
         text = subtitle,
         size = 12,
         color = palette.text_muted,
-        wrap = true,
+        ellipsis = false,
       },
       { type = "divider", color = palette.border_subtle },
       {
+        id = "diff-scroll",
         type = "scroll",
-        max_height = 250,
-        children = {
-          {
-            type = "col",
-            gap = 8,
-            children = cards,
-          },
-        },
+        flex = 1,
+        gap = 8,
+        children = cards,
       },
       { type = "divider", color = palette.border_subtle },
       {
@@ -349,9 +344,9 @@ function M.open_modal(record)
         gap = 8,
         align = "center",
         children = {
-          { id = "copy-full-clean", type = "button", text = "Copy Clean Message" },
+          { id = "copy-full-clean", type = "button", label = "Copy Clean Message", variant = "secondary", size = "sm" },
           { type = "spacer", flex = 1 },
-          { id = "close-btn", type = "button", text = "Close", style = "brand" },
+          { id = "close-btn", type = "button", label = "Close", variant = "primary", size = "sm" },
         },
       },
     },
@@ -361,21 +356,23 @@ function M.open_modal(record)
     id = MODAL_ID,
     slot = "modal",
     title = "Tracking Removed",
-    width = 540,
-    height = 410,
+    width = 560,
+    height = 420,
     root = root,
     on_event = function(ev)
       if type(ev) ~= "table" then
         return
       end
-      if ev.kind == "close" or (ev.kind == "key_down" and ev.key == "Escape") then
+      -- C-Cord emits `ev.type` and `ev.id` (keep `ev.kind` / `ev.node_id` fallback for safety)
+      local ev_type = ev.type or ev.kind
+      local nid = ev.id or ev.node_id
+      if ev_type == "close" or (ev_type == "key_down" and ev.key == "Escape") then
         close_modal()
         return
       end
-      if ev.kind ~= "click" then
+      if ev_type ~= "click" then
         return
       end
-      local nid = ev.node_id
       if nid == "close-btn" then
         close_modal()
         return
@@ -405,7 +402,6 @@ function M.open_modal(record)
   })
 
   if not ok or not mounted then
-    -- Graceful fallback to native confirm dialog if modal mount fails
     async.spawn(function()
       local res = ui.dialog.confirm({
         title = "Tracking Removed",
@@ -440,27 +436,40 @@ function M.attach_decoration(message_id, record)
   local muted = safe_theme_color("text_muted", "#9393a0")
 
   local on_event = function(ev, target_id)
-    if type(ev) == "table" and ev.kind == "click" then
-      local rec = records[target_id or message_id] or record
+    if type(ev) ~= "table" then
+      return
+    end
+    -- C-Cord decor.event sends `ev.type` ("click"|"right_click") and `ev.id`
+    local ev_type = ev.type or ev.kind
+    if ev_type == "click" then
+      local key = (type(target_id) == "string" and target_id ~= "") and target_id or message_id
+      local rec = records[key] or record
       M.open_modal(rec)
     end
   end
 
   if placement == "badge" then
-    return ui.decorate.message_badge({
+    local ok = ui.decorate.message_badge({
       id = dec_id,
+      message_id = message_id,
       target_id = message_id,
       widget = {
         id = "open-diff",
         type = "button",
-        text = "(tracking removed)",
+        label = "(tracking removed)",
+        variant = "ghost",
+        size = "xs",
+        tooltip = "Click to view removed tracking parameters",
       },
       on_event = on_event,
     })
+    log.debug("Attached message_badge for " .. message_id .. " ok=" .. tostring(ok))
+    return ok
   end
 
-  return ui.decorate.message_accessory({
+  local ok = ui.decorate.message_accessory({
     id = dec_id,
+    message_id = message_id,
     target_id = message_id,
     widget = {
       type = "row",
@@ -470,7 +479,10 @@ function M.attach_decoration(message_id, record)
         {
           id = "open-diff",
           type = "button",
-          text = "(tracking removed)",
+          label = "(tracking removed)",
+          variant = "secondary",
+          size = "xs",
+          tooltip = "Click to inspect what tracking was stripped",
         },
         {
           type = "text",
@@ -482,6 +494,8 @@ function M.attach_decoration(message_id, record)
     },
     on_event = on_event,
   })
+  log.debug("Attached message_accessory for " .. message_id .. " ok=" .. tostring(ok))
+  return ok
 end
 
 function M.remove_decoration(message_id)
@@ -504,13 +518,13 @@ end
 ---Records a cleaned outgoing message from `hooks.on_before_send` so it can be
 ---correlated to its snowflake `message_id` when `message.create` arrives.
 function M.record_pending_send(channel_id, original, cleaned, msg_stats, summary)
-  if type(channel_id) ~= "string" or channel_id == "" then
+  if channel_id == nil or tostring(channel_id) == "" then
     return
   end
   local now = time.now_ms()
   prune_pending(now)
   pending_sends[#pending_sends + 1] = {
-    channel_id = channel_id,
+    channel_id = tostring(channel_id),
     original = original,
     cleaned = cleaned,
     summary = summary,
@@ -522,12 +536,13 @@ end
 
 ---Records a cleaned message edit from `hooks.on_before_edit` (already has `message_id`).
 function M.record_edit(channel_id, message_id, original, cleaned, msg_stats, summary)
-  if type(message_id) ~= "string" or message_id == "" then
+  local mid = (message_id ~= nil) and tostring(message_id) or ""
+  if mid == "" then
     return
   end
   local rec = {
-    message_id = message_id,
-    channel_id = channel_id or "",
+    message_id = mid,
+    channel_id = (channel_id ~= nil) and tostring(channel_id) or "",
     original = original,
     cleaned = cleaned,
     summary = summary,
@@ -536,9 +551,9 @@ function M.record_edit(channel_id, message_id, original, cleaned, msg_stats, sum
     cleaned_at = time.now_ms(),
     changes = clone_changes(msg_stats.changes),
   }
-  records[message_id] = rec
+  records[mid] = rec
   save_records()
-  M.attach_decoration(message_id, rec)
+  M.attach_decoration(mid, rec)
 end
 
 local function is_own_message(ev)
@@ -546,38 +561,50 @@ local function is_own_message(ev)
     return true
   end
   local ok, me = pcall(_G.store.self)
-  if not ok or type(me) ~= "table" or not me.id then
+  if not ok or type(me) ~= "table" or not me.id or tostring(me.id) == "" or tostring(me.id) == "0" then
     return true
   end
-  if not ev.author_id then
+  if not ev.author_id or tostring(ev.author_id) == "" then
     return true
   end
   return tostring(ev.author_id) == tostring(me.id)
 end
 
----Handles `message.create` to bind pending cleaned sends to their real Discord `message_id`.
-function M.on_message_create(ev)
-  if type(ev) ~= "table" or type(ev.message_id) ~= "string" or ev.message_id == "" then
-    return
+local function is_local_echo_id(id_str)
+  if type(id_str) ~= "string" then
+    return false
   end
+  -- C-Cord sets bit 63 (>= 9223372036854775808) on unconfirmed local echo IDs
+  if #id_str > 19 then
+    return true
+  end
+  if #id_str == 19 and id_str >= "9223372036854775808" then
+    return true
+  end
+  return false
+end
+
+local function try_match_pending(ev, mid)
   if #pending_sends == 0 then
-    return
+    return false
   end
   if not is_own_message(ev) then
-    return
+    return false
   end
 
   local now = time.now_ms()
   prune_pending(now)
 
+  local ev_cid = (ev.channel_id ~= nil) and tostring(ev.channel_id) or ""
   local ev_content_trimmed = trim(ev.content)
+  local is_echo = is_local_echo_id(mid)
+
   for i = 1, #pending_sends do
     local p = pending_sends[i]
-    if p.channel_id == ev.channel_id and trim(p.cleaned) == ev_content_trimmed then
-      table.remove(pending_sends, i)
+    if p.channel_id == ev_cid and trim(p.cleaned) == ev_content_trimmed then
       local rec = {
-        message_id = ev.message_id,
-        channel_id = ev.channel_id,
+        message_id = mid,
+        channel_id = ev_cid,
         original = p.original,
         cleaned = p.cleaned,
         summary = p.summary,
@@ -586,23 +613,61 @@ function M.on_message_create(ev)
         cleaned_at = now,
         changes = p.changes,
       }
-      records[ev.message_id] = rec
+
+      if is_echo then
+        -- Unconfirmed local echo: show indicator immediately, but keep pending entry alive
+        -- so we rebind to the real Discord snowflake ID once server confirmation arrives.
+        p.echo_id = mid
+        records[mid] = rec
+        M.attach_decoration(mid, rec)
+        return true
+      end
+
+      -- Confirmed Discord snowflake ID: clean up any temporary echo decoration and persist.
+      if p.echo_id and p.echo_id ~= mid then
+        records[p.echo_id] = nil
+        M.remove_decoration(p.echo_id)
+      end
+      table.remove(pending_sends, i)
+      records[mid] = rec
       save_records()
-      M.attach_decoration(ev.message_id, rec)
-      return
+      M.attach_decoration(mid, rec)
+      return true
     end
   end
+  return false
+end
+
+---Handles `message.create` to bind pending cleaned sends to their real Discord `message_id`.
+---Note: C-Cord emits `ev.id` (not `ev.message_id`) for `message.create` and `message.update`.
+function M.on_message_create(ev)
+  if type(ev) ~= "table" then
+    return
+  end
+  local raw_mid = ev.id or ev.message_id
+  local mid = (raw_mid ~= nil) and tostring(raw_mid) or ""
+  if mid == "" or mid == "0" then
+    return
+  end
+  try_match_pending(ev, mid)
 end
 
 ---Handles `message.update` without ever interfering with C-Cord's native "(edited)" indicator.
+---Also catches server confirmation if C-Cord promotes an optimistic echo via `message.update`.
 ---If the user manually edited the message and removed all previously cleaned links,
 ---removes our stale "(tracking removed)" indicator.
 function M.on_message_update(ev)
-  if type(ev) ~= "table" or type(ev.message_id) ~= "string" then
+  if type(ev) ~= "table" then
     return
   end
-  local existing = records[ev.message_id]
+  local raw_mid = ev.id or ev.message_id
+  local mid = (raw_mid ~= nil) and tostring(raw_mid) or ""
+  if mid == "" or mid == "0" then
+    return
+  end
+  local existing = records[mid]
   if not existing then
+    try_match_pending(ev, mid)
     return
   end
   if type(ev.content) ~= "string" then
@@ -619,20 +684,22 @@ function M.on_message_update(ev)
   end
 
   if not still_present then
-    records[ev.message_id] = nil
-    M.remove_decoration(ev.message_id)
+    records[mid] = nil
+    M.remove_decoration(mid)
     save_records()
   end
 end
 
 ---Handles `message.delete` to clean up stored records and decorations.
 function M.on_message_delete(ev)
-  if type(ev) ~= "table" or type(ev.message_id) ~= "string" then
+  if type(ev) ~= "table" then
     return
   end
-  if records[ev.message_id] then
-    records[ev.message_id] = nil
-    M.remove_decoration(ev.message_id)
+  local raw_mid = ev.message_id or ev.id
+  local mid = (raw_mid ~= nil) and tostring(raw_mid) or ""
+  if mid ~= "" and records[mid] then
+    records[mid] = nil
+    M.remove_decoration(mid)
     save_records()
   end
 end

@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "io.github.32bitx64bit.tracking-removal",
   "name": "Tracking Removal",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "api": 1,
   "main": "main.lua",
   "description": "Strips tracking links on open, send, and edit using auto-updating 3rd-party filter lists, with clickable (tracking removed) diff popups.",

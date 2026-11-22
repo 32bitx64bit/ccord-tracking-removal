@@ -49,7 +49,7 @@ Declares **API Class 3** permissions strictly needed for link interception, tran
 ## Installation & Development
 
 1. **Install from C-Cord Plugin Catalog**: Search for **Tracking Removal** under **Settings → Plugins → Discover**, or open `ccord://plugins/install/io.github.32bitx64bit.tracking-removal`.
-2. **Or install `.cce` from GitHub Releases**: Download `io.github.32bitx64bit.tracking-removal-1.2.0.cce` from [Releases](https://github.com/32bitx64bit/ccord-tracking-removal/releases) and install under **Settings → Plugins**, then approve the permissions prompt.
+2. **Or install `.cce` from GitHub Releases**: Download `io.github.32bitx64bit.tracking-removal-1.2.1.cce` from [Releases](https://github.com/32bitx64bit/ccord-tracking-removal/releases) and install under **Settings → Plugins**, then approve the permissions prompt.
 3. **Or run directly from source in dev mode**:
    ```bash
    ccord --plugin-dir "/path/to/parent-folder-containing-plugin" --plugin-dev
@@ -62,5 +62,5 @@ Declares **API Class 3** permissions strictly needed for link interception, tran
    ```
 5. **Repackage `.cce`**:
    ```bash
-   zip -r9 io.github.32bitx64bit.tracking-removal-1.2.0.cce . -x ".git/*" ".github/*" "tests/*" "*.cce" "*.zip" ".*"
+   zip -r9 io.github.32bitx64bit.tracking-removal-1.2.1.cce . -x ".git/*" ".github/*" "tests/*" "*.cce" "*.zip" ".*"
    ```
