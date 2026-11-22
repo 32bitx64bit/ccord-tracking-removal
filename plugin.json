@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "io.github.32bitx64bit.tracking-removal",
+  "name": "Tracking Removal",
+  "version": "1.1.0",
+  "api": 1,
+  "main": "main.lua",
+  "description": "Strips tracking links on open, send, and edit using auto-updating 3rd-party filter lists (AdGuard, DandelionSprout, ClearURLs) and custom lists.",
+  "license": "MIT",
+  "platforms": ["all"],
+  "permissions": [
+    "messages.hook",
+    "notifications.hook",
+    "network.http"
+  ]
+}
