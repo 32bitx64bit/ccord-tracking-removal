@@ -5,6 +5,7 @@
 
 local cleaner = require("cleaner")
 local lists = require("lists")
+local transparency = require("transparency")
 
 -- ============================================================================
 -- Settings Schema (Settings -> Plugins -> Tracking Removal -> Configure)
@@ -142,6 +143,24 @@ settings.schema({
 
   { type = "section", label = "Feedback & Quick Overrides" },
   {
+    key = "show_message_badge",
+    type = "toggle",
+    label = "Show (tracking removed) Indicator",
+    description = "Attach a clickable (tracking removed) label to cleaned messages that opens a popup showing exactly what was modified. Does not alter C-Cord's (edited) text.",
+    default = true,
+  },
+  {
+    key = "badge_placement",
+    type = "select",
+    label = "Indicator Placement",
+    description = "Choose where to display the clickable (tracking removed) indicator on cleaned messages.",
+    default = "accessory",
+    options = {
+      { label = "Below message (accessory)", value = "accessory" },
+      { label = "Message header (badge)", value = "badge" },
+    },
+  },
+  {
     key = "show_toast",
     type = "toggle",
     label = "Show Toast Notifications",
@@ -208,12 +227,16 @@ local function invalidate_options()
   cached_opts = nil
 end
 
--- Load any previously cached remote lists & imported local lists immediately at startup
+-- Load any previously cached remote lists, local lists, and cleaned-message indicators at startup
 lists.rebuild()
+transparency.init()
 
 settings.on_change(function(key, val)
   invalidate_options()
   log.debug("Setting updated: " .. tostring(key) .. " = " .. tostring(val))
+  if key == "show_message_badge" or key == "badge_placement" then
+    transparency.refresh_all_decorations()
+  end
   if LIST_SETTING_KEYS[key] then
     lists.rebuild()
     invalidate_options()
@@ -314,7 +337,7 @@ end
 -- Interception Hooks: Outgoing Messages, Edited Messages, and Link Opens
 -- ============================================================================
 
-local function handle_message_hook(content, kind)
+local function handle_message_hook(content, kind, meta)
   if settings.get("enabled", true) == false then
     return nil
   end
@@ -336,6 +359,12 @@ local function handle_message_hook(content, kind)
   local summary = format_message_summary(msg_stats)
   log.info("[" .. kind .. "] " .. summary)
 
+  if kind == "send" and meta and meta.channel_id then
+    pcall(transparency.record_pending_send, meta.channel_id, content, cleaned, msg_stats, summary)
+  elseif kind == "edit" and meta and meta.message_id then
+    pcall(transparency.record_edit, meta.channel_id, meta.message_id, content, cleaned, msg_stats, summary)
+  end
+
   if settings.get("show_toast", true) ~= false then
     ui.toast.show("Tracking Removal: " .. summary, "info")
   end
@@ -350,7 +379,7 @@ hooks.on_before_send(function(data)
   if type(data) ~= "table" then
     return nil
   end
-  local ok, res = pcall(handle_message_hook, data.content, "send")
+  local ok, res = pcall(handle_message_hook, data.content, "send", data)
   if not ok then
     log.warn("Error in on_before_send hook: " .. tostring(res))
     return nil
@@ -365,12 +394,34 @@ hooks.on_before_edit(function(data)
   if type(data) ~= "table" then
     return nil
   end
-  local ok, res = pcall(handle_message_hook, data.content, "edit")
+  local ok, res = pcall(handle_message_hook, data.content, "edit", data)
   if not ok then
     log.warn("Error in on_before_edit hook: " .. tostring(res))
     return nil
   end
   return res
+end)
+
+-- Correlate cleaned sends to their message IDs and maintain "(tracking removed)" indicators
+events.on("message.create", function(ev)
+  local ok, err = pcall(transparency.on_message_create, ev)
+  if not ok then
+    log.warn("Error in message.create handler: " .. tostring(err))
+  end
+end)
+
+events.on("message.update", function(ev)
+  local ok, err = pcall(transparency.on_message_update, ev)
+  if not ok then
+    log.warn("Error in message.update handler: " .. tostring(err))
+  end
+end)
+
+events.on("message.delete", function(ev)
+  local ok, err = pcall(transparency.on_message_delete, ev)
+  if not ok then
+    log.warn("Error in message.delete handler: " .. tostring(err))
+  end
 end)
 
 hooks.on_link_open(function(data)

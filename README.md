@@ -6,7 +6,8 @@ Powered by **auto-updating 3rd-party community filter lists** (AdGuard URL Track
 
 ## Features
 
-- **Automatic outgoing & edited message sanitization (`messages.hook`)**: Strips tracking parameters and unwraps redirectors before messages are sent to Discord.
+- **Automatic outgoing & edited message sanitization (`messages.hook`)**: Strips tracking parameters and unwraps redirectors *before* messages are sent to Discord (Discord never receives the tracking parameters).
+- **Clickable `(tracking removed)` Transparency Indicator (`ui.decorate` + `ui.panel`)**: Attaches a clickable `(tracking removed)` indicator (below the message or in the message header — configurable in Settings) to any message cleaned by the plugin. Clicking it opens a native diff popup showing the original URL, the clean URL sent to Discord, and every stripped parameter/redirect, with one-click copy buttons. Never modifies or interferes with C-Cord's native `(edited)` label when you manually edit messages.
 - **Automatic link-open sanitization (`notifications.hook`)**: Cleans URLs before C-Cord opens them in your browser.
 - **Auto-Updating 3rd-Party Filter Lists (`network.http`)**:
   - **AdGuard URL Tracking Filter (#17)** *(enabled by default)* — Daily community-maintained `$removeparam` list (2,700+ rules including `x.com ?a=`, with automatic mirror failover and `@@` safety exceptions like Wayback Machine `archive.*`).
@@ -37,27 +38,29 @@ Powered by **auto-updating 3rd-party community filter lists** (AdGuard URL Track
 
 ## Permissions
 
-Declares **API Class 3** permissions strictly needed for link interception and 3rd-party list updates:
+Declares **API Class 3** permissions strictly needed for link interception, transparency UI, and 3rd-party list updates:
 
 - `messages.hook` — Intercept and rewrite outgoing and edited messages before send.
 - `notifications.hook` — Intercept and rewrite URLs before opening links.
+- `events.messages` & `store.read` — Match your newly sent/edited/deleted messages to attach and clean up `(tracking removed)` indicators.
+- `ui.decorate` & `ui.panel` — Render the clickable `(tracking removed)` indicator and native Before/After transparency modal.
 - `network.http` — Fetch and auto-update enabled 3rd-party & custom HTTPS filter lists.
 
 ## Installation & Development
 
 1. **Install from C-Cord Plugin Catalog**: Search for **Tracking Removal** under **Settings → Plugins → Discover**, or open `ccord://plugins/install/io.github.32bitx64bit.tracking-removal`.
-2. **Or install `.cce` from GitHub Releases**: Download `io.github.32bitx64bit.tracking-removal-1.1.0.cce` from [Releases](https://github.com/32bitx64bit/ccord-tracking-removal/releases) and install under **Settings → Plugins**, then approve the permissions prompt.
+2. **Or install `.cce` from GitHub Releases**: Download `io.github.32bitx64bit.tracking-removal-1.2.0.cce` from [Releases](https://github.com/32bitx64bit/ccord-tracking-removal/releases) and install under **Settings → Plugins**, then approve the permissions prompt.
 3. **Or run directly from source in dev mode**:
    ```bash
    ccord --plugin-dir "/path/to/parent-folder-containing-plugin" --plugin-dev
    ```
 4. **Run syntax checks and tests**:
    ```bash
-   luac5.5 -p rules.lua list_parser.lua lists.lua cleaner.lua main.lua
+   luac5.5 -p rules.lua list_parser.lua lists.lua cleaner.lua transparency.lua main.lua
    lua5.5 tests/test_cleaner.lua
    lua5.5 tests/test_main.lua
    ```
 5. **Repackage `.cce`**:
    ```bash
-   zip -r9 io.github.32bitx64bit.tracking-removal-1.1.0.cce . -x ".git/*" ".github/*" "tests/*" "*.cce" "*.zip" ".*"
+   zip -r9 io.github.32bitx64bit.tracking-removal-1.2.0.cce . -x ".git/*" ".github/*" "tests/*" "*.cce" "*.zip" ".*"
    ```

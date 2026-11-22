@@ -68,6 +68,10 @@ local state = {
   settings_schema = nil,
   settings_listeners = {},
   hooks = {},
+  events = {},
+  decorations = {},
+  panels = {},
+  self_user = { id = "USER_SELF_123" },
   context_menus = {},
   commands = {},
   exposed = {},
@@ -85,6 +89,10 @@ local state = {
 local declared_perms = {
   ["messages.hook"] = true,
   ["notifications.hook"] = true,
+  ["events.messages"] = true,
+  ["store.read"] = true,
+  ["ui.decorate"] = true,
+  ["ui.panel"] = true,
   ["network.http"] = true,
 }
 
@@ -337,6 +345,71 @@ sandbox_env = {
         return res, nil
       end,
     }),
+    decorate = freeze({
+      message_accessory = function(spec)
+        require_perm("ui.decorate")
+        state.decorations[spec.id] = { kind = "accessory", spec = spec }
+        return true
+      end,
+      message_badge = function(spec)
+        require_perm("ui.decorate")
+        state.decorations[spec.id] = { kind = "badge", spec = spec }
+        return true
+      end,
+      remove = function(id)
+        require_perm("ui.decorate")
+        state.decorations[id] = nil
+        return true
+      end,
+      clear = function()
+        require_perm("ui.decorate")
+        state.decorations = {}
+        return true
+      end,
+    }),
+    panel = freeze({
+      mount = function(spec)
+        require_perm("ui.panel")
+        state.panels[spec.id] = spec
+        return true
+      end,
+      unmount = function(id)
+        require_perm("ui.panel")
+        state.panels[id] = nil
+        return true
+      end,
+    }),
+  }),
+
+  theme = freeze({
+    color = function(token)
+      local map = {
+        bg_primary = "#1b1b20", bg_secondary = "#222228", bg_tertiary = "#141417",
+        border_subtle = "#2a2a33", text_header = "#f0f0f3", text_normal = "#d4d4d8",
+        text_muted = "#9393a0", text_on_brand = "#ffffff", brand = "#6e7bf2",
+        danger = "#ec565b", status_online = "#3ba55d",
+      }
+      return map[token]
+    end,
+  }),
+
+  store = freeze({
+    self = function()
+      require_perm("store.read")
+      return state.self_user
+    end,
+  }),
+
+  events = freeze({
+    on = function(name, fn)
+      if name == "message.create" or name == "message.update" or name == "message.delete" then
+        require_perm("events.messages")
+      end
+      state.events[name] = fn
+    end,
+    off = function(name)
+      state.events[name] = nil
+    end,
   }),
 
   commands = freeze({
@@ -552,6 +625,102 @@ assert_eq("disabled plugin passes link untouched", state.hooks.on_link_open({ ur
 state.commands["cleanurl"].run("toggle")
 state.commands["cleanurl"].run("reset")
 assert_eq("stats reset to 0", state.storage.stats.urls_cleaned, 0)
+
+-- ============================================================================
+-- 5. Verify Clickable "(tracking removed)" Indicator, Modal Popup & Edit Safety
+-- ============================================================================
+assert_true("message.create event listener registered", type(state.events["message.create"]) == "function")
+assert_true("message.update event listener registered", type(state.events["message.update"]) == "function")
+assert_true("message.delete event listener registered", type(state.events["message.delete"]) == "function")
+
+-- 5a. Send dirty message -> another user posts same clean text (ignored!) -> our own message.create arrives -> badge attached!
+local dirty_msg = "Look https://x.com/AqueleJunio/status/2124282949608603764?a=zd4wZf288aIM6IVgipk&s=20 "
+local send_out = state.hooks.on_before_send({ channel_id = "CHAN_99", content = dirty_msg })
+assert_eq("dirty message cleaned before send", send_out.content, "Look https://x.com/AqueleJunio/status/2124282949608603764 ")
+
+-- Someone else posts the same text -> must NOT attach badge to their message!
+state.events["message.create"]({
+  channel_id = "CHAN_99",
+  message_id = "MSG_OTHER_USER",
+  author_id = "USER_STRANGER_999",
+  content = "Look https://x.com/AqueleJunio/status/2124282949608603764",
+})
+assert_eq("other user's message not decorated", state.decorations["tr-msg-MSG_OTHER_USER"], nil)
+
+-- Our own message arrives (with Discord-trimmed trailing space!) -> matched and decorated!
+state.events["message.create"]({
+  channel_id = "CHAN_99",
+  message_id = "MSG_SELF_1",
+  author_id = "USER_SELF_123",
+  content = "Look https://x.com/AqueleJunio/status/2124282949608603764",
+})
+local dec = state.decorations["tr-msg-MSG_SELF_1"]
+assert_true("cleaned send attaches (tracking removed) accessory", dec ~= nil and dec.kind == "accessory")
+assert_eq("accessory button text is (tracking removed)", dec.spec.widget.children[1].text, "(tracking removed)")
+
+-- 5b. Click "(tracking removed)" -> opens native modal popup showing Before/After & Copy buttons!
+dec.spec.on_event({ kind = "click", node_id = "open-diff" }, "MSG_SELF_1")
+local modal = state.panels["tracking-diff-modal"]
+assert_true("clicking (tracking removed) mounts transparency modal", modal ~= nil and modal.slot == "modal")
+
+-- Copy Clean URL & Copy Original URL inside modal
+state.clipboard = nil
+modal.on_event({ kind = "click", node_id = "copy-clean-1" })
+assert_eq("modal Copy Clean copies cleaned URL", state.clipboard, "https://x.com/AqueleJunio/status/2124282949608603764")
+modal.on_event({ kind = "click", node_id = "copy-orig-1" })
+assert_eq("modal Copy Original copies original URL", state.clipboard, "https://x.com/AqueleJunio/status/2124282949608603764?a=zd4wZf288aIM6IVgipk&s=20")
+
+-- Close modal
+modal.on_event({ kind = "click", node_id = "close-btn" })
+assert_eq("modal unmounts on Close click", state.panels["tracking-diff-modal"], nil)
+
+-- 5c. User manually edits a regular uncleaned message -> zero interference
+assert_eq("manual edit of clean message passes untouched", state.hooks.on_before_edit({
+  channel_id = "CHAN_99", message_id = "MSG_REGULAR", content = "just fixing a typo",
+}), nil)
+state.events["message.update"]({ channel_id = "CHAN_99", message_id = "MSG_REGULAR", content = "just fixing a typo" })
+assert_eq("regular edited message gets no tracking decoration", state.decorations["tr-msg-MSG_REGULAR"], nil)
+
+-- 5d. User manually edits MSG_SELF_1 while keeping the clean link -> indicator preserved
+state.events["message.update"]({
+  channel_id = "CHAN_99",
+  message_id = "MSG_SELF_1",
+  content = "Updated caption: https://x.com/AqueleJunio/status/2124282949608603764",
+})
+assert_true("manual edit keeping cleaned link preserves indicator", state.decorations["tr-msg-MSG_SELF_1"] ~= nil)
+
+-- 5e. User manually edits MSG_SELF_1 and removes the link completely -> stale indicator removed
+state.events["message.update"]({
+  channel_id = "CHAN_99",
+  message_id = "MSG_SELF_1",
+  content = "Never mind, removed the link!",
+})
+assert_eq("manual edit removing link removes stale (tracking removed) indicator", state.decorations["tr-msg-MSG_SELF_1"], nil)
+
+-- 5f. Switch placement to header badge & clean a message edit -> uses ui.decorate.message_badge
+sandbox_env.settings.set("badge_placement", "badge")
+state.hooks.on_before_edit({
+  channel_id = "CHAN_99",
+  message_id = "MSG_EDIT_2",
+  content = "New link https://youtu.be/abc?si=999&t=5",
+})
+local badge_dec = state.decorations["tr-msg-MSG_EDIT_2"]
+assert_true("badge_placement='badge' uses ui.decorate.message_badge", badge_dec ~= nil and badge_dec.kind == "badge")
+assert_eq("header badge button text is (tracking removed)", badge_dec.spec.widget.text, "(tracking removed)")
+
+-- 5g. Message delete cleans up decoration & stored record
+state.events["message.delete"]({ channel_id = "CHAN_99", message_id = "MSG_EDIT_2" })
+assert_eq("message.delete removes decoration", state.decorations["tr-msg-MSG_EDIT_2"], nil)
+
+-- 5h. Disabling show_message_badge clears decorations immediately
+state.hooks.on_before_edit({
+  channel_id = "CHAN_99",
+  message_id = "MSG_EDIT_3",
+  content = "Link https://youtu.be/xyz?si=123",
+})
+assert_true("decoration present before toggle off", state.decorations["tr-msg-MSG_EDIT_3"] ~= nil)
+sandbox_env.settings.set("show_message_badge", false)
+assert_eq("disabling show_message_badge clears all decorations", state.decorations["tr-msg-MSG_EDIT_3"], nil)
 
 io.stdout:write(string.format("Main sandbox integration tests completed: %d passed, %d failed\n", passed, failed))
 if failed > 0 then
